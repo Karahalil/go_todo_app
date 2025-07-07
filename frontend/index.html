@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Go Web App</title>
+</head>
+<body>
+  <h1>Welcome to My Go App</h1>
+  <div id="users"></div>
+
+  <h2>Add User</h2>
+  <form id="userForm">
+    <input type="text" id="username" placeholder="Name" required>
+    <input type="email" id="email" placeholder="Email" required>
+    <button type="submit" id="submitBtn">Add User</button>
+    <button type="button" id="cancelEditBtn" style="display:none; margin-left:10px;">Cancel</button>
+    <button type="button" id="getTasksBtn" style="display:none; margin-left:10px;">Get Tasks</button>
+  </form>
+  <div id="formResult"></div>
+  <div id="tasksResult"></div>
+  <form id="taskForm" style="display:none; margin-top:20px;">
+    <h3>Add Task for Selected User</h3>
+    <input type="text" id="taskTitle" placeholder="Title" required>
+    <input type="text" id="taskDescription" placeholder="Description" required>
+    <select id="taskStatus" required>
+      <option value="pending">Pending</option>
+      <option value="current">Current</option>
+      <option value="done">Done</option>
+    </select>
+    <button type="submit">Add Task</button>
+  </form>
+  <div id="taskFormResult"></div>
+
+  <script>
+    // Fetch and display users
+    function loadUsers() {
+      fetch('/users', { cache: 'no-store' })
+        .then(res => res.json())
+        .then(users => {
+          const usersDiv = document.getElementById('users');
+          usersDiv.innerHTML = '';
+          if (Array.isArray(users) && users.length > 0) {
+            const ul = document.createElement('ul');
+            ul.style.listStyleType = 'disc';
+            ul.style.paddingLeft = '20px';
+            users.forEach(user => {
+              const li = document.createElement('li');
+              li.textContent = `${user.username} (${user.email})`;
+              li.style.cursor = 'pointer';
+              li.onclick = () => selectUser(user);
+              ul.appendChild(li);
+            });
+            usersDiv.appendChild(ul);
+          } else {
+            usersDiv.textContent = 'No users found.';
+          }
+        });
+    }
+    loadUsers();
+
+    let selectedUserId = null;
+    function selectUser(user) {
+      selectedUserId = user.id;
+      document.getElementById('username').value = user.username;
+      document.getElementById('email').value = user.email;
+      document.getElementById('submitBtn').textContent = 'Update User';
+      document.getElementById('cancelEditBtn').style.display = 'inline';
+      document.getElementById('getTasksBtn').style.display = 'inline';
+      document.getElementById('taskForm').style.display = 'block';
+    }
+
+    function resetForm() {
+      selectedUserId = null;
+      document.getElementById('userForm').reset();
+      document.getElementById('submitBtn').textContent = 'Add User';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+      document.getElementById('getTasksBtn').style.display = 'none';
+      document.getElementById('tasksResult').innerHTML = '';
+      document.getElementById('taskForm').style.display = 'none';
+      document.getElementById('taskForm').reset && document.getElementById('taskForm').reset();
+      document.getElementById('taskFormResult').innerHTML = '';
+    }
+
+    // Handle form submission
+    document.getElementById('userForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const email = document.getElementById('email').value;
+      let url = '/users';
+      let method = 'POST';
+      if (selectedUserId) {
+        url = `/users/${selectedUserId}`;
+        method = 'PUT';
+      }
+      fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email })
+      })
+      .then(res => {
+        if (res.status === 409) {
+          alert('Email already exists');
+          return;
+        }
+        if (!res.ok) {
+          return res.json().then(data => { throw new Error(data.error || 'Unknown error'); });
+        }
+        resetForm();
+        loadUsers();
+      })
+      .catch(err => {
+        document.getElementById('formResult').innerText = err.message;
+      });
+    });
+
+    document.getElementById('cancelEditBtn').addEventListener('click', function() {
+      resetForm();
+    });
+
+    document.getElementById('getTasksBtn').addEventListener('click', function() {
+      if (!selectedUserId) return;
+      fetch(`/tasks/${selectedUserId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(res => res.json())
+      .then(tasks => {
+        const tasksDiv = document.getElementById('tasksResult');
+        tasksDiv.innerHTML = '';
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          const ul = document.createElement('ul');
+          ul.style.listStyleType = 'circle';
+          ul.style.paddingLeft = '20px';
+          tasks.forEach(task => {
+            const li = document.createElement('li');
+            li.textContent = `${task.title} - ${task.status}`;
+            ul.appendChild(li);
+          });
+          tasksDiv.appendChild(ul);
+        } else {
+          tasksDiv.textContent = 'No tasks found for this user.';
+        }
+      })
+      .catch(err => {
+        document.getElementById('tasksResult').innerText = err.message;
+      });
+    });
+    
+    document.getElementById('taskForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      if (!selectedUserId) return;
+      const title = document.getElementById('taskTitle').value;
+      const description = document.getElementById('taskDescription').value;
+      const status = document.getElementById('taskStatus').value;
+      fetch('/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description, status, user_id: String(selectedUserId) })
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('taskFormResult').innerText = JSON.stringify(data, null, 2);
+        document.getElementById('taskForm').reset();
+      })
+      .catch(err => {
+        document.getElementById('taskFormResult').innerText = err.message;
+      });
+    });
+  </script>
+</body>
+</html>
